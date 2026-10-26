@@ -1,0 +1,12 @@
+---
+- name: Setting Up K3s on my Azure VM
+  hosts: azure
+  become: true
+  tasks:
+    - name: Install K3s
+      shell: curl -sfL https://get.k3s.io | sh -
+
+    - name: Allow non root users to run kubectl
+      file:
+        path: /etc/rancher/k3s/k3s.yaml
+        mode: '0644'

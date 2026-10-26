@@ -1,0 +1,15 @@
+# Azure SSH keys - NEVER COMMIT
+*.pem
+ansible/*.pem
+
+# Java / Maven build output
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# OS files
+.DS_Store
