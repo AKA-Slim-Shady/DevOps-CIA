@@ -1,0 +1,10 @@
+target/*
+!target/*.jar
+.git
+.github
+.mvn
+mvnw*
+*.md
+.gitignore
+ansible/
+screenshots/
