@@ -1,0 +1,103 @@
+name: End-to-End Java CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  ci-cd-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      # STAGE 1: Checkout Source Code
+      - name: 1. Checkout source code
+        uses: actions/checkout@v4
+
+      # Setup Java 21 environment
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # Make Maven wrapper executable
+      - name: Grant execute permission for mvnw
+        run: chmod +x mvnw
+
+      # STAGE 2: Compile & Package using Maven
+      - name: 2. Compile and package using Maven
+        run: ./mvnw clean package -DskipTests
+
+      # STAGE 3: Run Automated Tests
+      - name: 3. Run automated tests
+        run: ./mvnw test
+
+      # Set up lowercased image name and log in to GHCR
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set lowercase image name
+        run: |
+          IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/java-web-app"
+          echo "IMAGE_NAME=${IMAGE_NAME,,}" >> $GITHUB_ENV
+
+      # STAGE 4: Build & Tag the Docker Image
+      - name: 4. Build and tag Docker image
+        run: |
+          docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+                       -t ${{ env.IMAGE_NAME }}:latest .
+
+      # STAGE 5: Push Image to Registry
+      - name: 5. Push image to registry
+        run: |
+          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.IMAGE_NAME }}:latest
+
+      # STAGE 6: Deploy to Cloud-Hosted Kubernetes (K3s on Azure)
+      - name: 6. Deploy to K3s cluster on Azure VM via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: IMAGE_NAME,GITHUB_SHA
+          script: |
+            mkdir -p ~/k8s
+
+            # Fetch deployment & replace the image tag with the exact commit SHA
+            curl -s https://raw.githubusercontent.com/${{ github.repository }}/main/k8s/deployment.yaml | \
+              sed "s|DOCKER_IMAGE_TAG|${IMAGE_NAME}:${GITHUB_SHA}|g" | \
+              kubectl apply -f -
+
+            # Fetch and apply service manifest
+            curl -s https://raw.githubusercontent.com/${{ github.repository }}/main/k8s/service.yaml | \
+              kubectl apply -f -
+
+      # STAGE 7: Verify Deployment Status & Application Availability
+      - name: 7. Verify deployment rollout status
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            kubectl rollout status deployment/java-web-app --timeout=90s
+            kubectl get pods -l app=java-web-app -o wide
+            kubectl get svc java-web-app-service
+
+      - name: Verify application endpoint availability
+        run: |
+          echo "Waiting 5 seconds for container network route..."
+          sleep 5
+          curl -I --retry 5 --retry-delay 3 --connect-timeout 5 http://${{ secrets.VM_HOST }}:30080 || exit 1
+          echo "Application is live and responding at http://${{ secrets.VM_HOST }}:30080"
