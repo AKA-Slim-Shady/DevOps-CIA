@@ -11,7 +11,7 @@ public class SpringBootDockerApplication {
 
     @GetMapping("/")
     public String home() {
-        return "<h1>CIA 2: Cloud CI/CD Pipeline Running Successfully!</h1><br><h1>Surya Da Goat Made Ts</h1><p>Application Version: 3.0.0</p>";
+        return "<h1>CIA 2: Cloud CI/CD Pipeline Running Successfully!</h1><br><h1>Surya Da Goat Made Ts</h1><br><h2>Dhivya Mam Viva!</h2><p>Application Version: 4.0.0</p>";
     }
 
     public static void main(String[] args) {
